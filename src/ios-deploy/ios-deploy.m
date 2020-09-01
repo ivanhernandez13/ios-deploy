@@ -1033,14 +1033,14 @@ void lldb_callback(CFSocketRef s, CFSocketCallBackType callbackType, CFDataRef a
 {
     //printf ("lldb: %s\n", CFDataGetBytePtr (data));
 
-    if (CFDataGetLength (data) == 0) {
+    CFIndex length = CFDataGetLength(data);
+    if (length == 0) {
         // close the socket on which we've got end-of-file, the lldb_socket.
         CFSocketInvalidate(s);
         CFRelease(s);
         return;
     }
-    int sent = AMDServiceConnectionSend(dbgServiceConnection, CFDataGetBytePtr(data),  CFDataGetLength (data));
-    assert (CFDataGetLength (data) == sent);
+    assert (AMDServiceConnectionSend(dbgServiceConnection, CFDataGetBytePtr(data),  data_length) == data_length);
 }
 
 void fdvendor_callback(CFSocketRef s, CFSocketCallBackType callbackType, CFDataRef address, const void *data, void *info) {
@@ -1457,7 +1457,9 @@ void read_dir(AFCConnectionRef afc_conn_p, const char* dir,
         if (_file_meta_info == nil) {
             _file_meta_info = [[NSMutableArray alloc] init];
         }
-        [_file_meta_info addObject: @{@"full_path": [NSString stringWithUTF8String:dir],
+        NSString * full_path = [NSString stringWithUTF8String:dir];
+        assert(full_path != nil);
+        [_file_meta_info addObject: @{@"full_path": full_path,
                                       @"st_ifmt": ifmt,
                                       @"st_nlink": @(nlink),
                                       @"st_size": @(size),
