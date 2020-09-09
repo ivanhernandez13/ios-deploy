@@ -31,12 +31,12 @@
  */
 #define LLDB_PREP_CMDS CFSTR("\
     platform select remote-ios --sysroot '{symbols_path}'\n\
-    target create \"{disk_app}\"\n\
+    \
     script fruitstrap_device_app=\"{device_app}\"\n\
     script fruitstrap_connect_url=\"connect://127.0.0.1:{device_port}\"\n\
     script fruitstrap_output_path=\"{output_path}\"\n\
     script fruitstrap_error_path=\"{error_path}\"\n\
-    target modules search-paths add {modules_search_paths_pairs}\n\
+    \
     command script import \"{python_file_path}\"\n\
     command script add -f {python_command}.connect_command connect\n\
     command script add -s asynchronous -f {python_command}.run_command run\n\
@@ -866,7 +866,7 @@ void write_lldb_prep_cmds(AMDeviceRef device, CFURLRef disk_app_url) {
     }
     range.length = CFStringGetLength(cmds);
 
-    CFStringRef bundle_identifier = copy_disk_app_identifier(disk_app_url);
+    CFStringRef bundle_identifier = bundle_id ? CFStringCreateWithCString(kCFAllocatorDefault, bundle_id, kCFStringEncodingUTF8) : copy_disk_app_identifier(disk_app_url);
     CFURLRef device_app_url = copy_device_app_url(device, bundle_identifier);
     CFRelease(bundle_identifier);
     CFStringRef device_app_path = CFURLCopyFileSystemPath(device_app_url, kCFURLPOSIXPathStyle);
@@ -874,10 +874,10 @@ void write_lldb_prep_cmds(AMDeviceRef device, CFURLRef disk_app_url) {
     CFRelease(device_app_path);
     range.length = CFStringGetLength(cmds);
 
-    CFStringRef disk_app_path = CFURLCopyFileSystemPath(disk_app_url, kCFURLPOSIXPathStyle);
-    CFStringFindAndReplace(cmds, CFSTR("{disk_app}"), disk_app_path, range, 0);
-    CFRelease(disk_app_path);
-    range.length = CFStringGetLength(cmds);
+//    CFStringRef disk_app_path = CFURLCopyFileSystemPath(disk_app_url, kCFURLPOSIXPathStyle);
+//    CFStringFindAndReplace(cmds, CFSTR("{disk_app}"), disk_app_path, range, 0);
+//    CFRelease(disk_app_path);
+//    range.length = CFStringGetLength(cmds);
 
     CFStringRef device_port = CFStringCreateWithFormat(NULL, NULL, CFSTR("%d"), port);
     CFStringFindAndReplace(cmds, CFSTR("{device_port}"), device_port, range, 0);
@@ -1040,7 +1040,7 @@ void lldb_callback(CFSocketRef s, CFSocketCallBackType callbackType, CFDataRef a
         CFRelease(s);
         return;
     }
-    assert (AMDServiceConnectionSend(dbgServiceConnection, CFDataGetBytePtr(data),  data_length) == data_length);
+  AMDServiceConnectionSend(dbgServiceConnection, CFDataGetBytePtr(data),  length);
 }
 
 void fdvendor_callback(CFSocketRef s, CFSocketCallBackType callbackType, CFDataRef address, const void *data, void *info) {
@@ -1974,6 +1974,19 @@ void uninstall_app(AMDeviceRef device) {
 }
 
 void handle_device(AMDeviceRef device) {
+    if (bundle_id && !app_path) {
+      CFStringRef bundle_id_str = CFStringCreateWithCString(kCFAllocatorDefault, bundle_id, kCFStringEncodingUTF8);
+
+      connect_and_start_session(device);
+      // Uses AMDeviceLookupApplications to find app bundle path with matching bundleId.
+      CFURLRef device_app_url = copy_device_app_url(device, bundle_id_str);
+      check_error(AMDeviceStopSession(device));
+      check_error(AMDeviceDisconnect(device));
+
+      CFStringRef path = CFURLCopyPath(device_app_url);
+      app_path = CFStringGetCStringPtr(path, kCFStringEncodingUTF8);
+    }
+
     NSLogVerbose(@"Already found device? %d", found_device);
 
     CFStringRef device_full_name = get_device_full_name(device),
@@ -2491,7 +2504,7 @@ int main(int argc, char *argv[]) {
 
     if (!app_path && !detect_only && !command_only) {
         usage(argv[0]);
-        on_error(@"One of -[b|c|o|l|w|D|R|e|9] is required to proceed!");
+//        on_error(@"One of -[b|c|o|l|w|D|R|e|9] is required to proceed!");
     }
 
     if (unbuffered) {
